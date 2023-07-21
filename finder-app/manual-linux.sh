@@ -104,19 +104,19 @@ sudo mknod -m 666 dev/null c 1 45
 
 # TODO: Clean and build the writer utility
 
-make -C ~/projects/assignment-1-TalHal/finder-app clean
-make -C ~/projects/assignment-1-TalHal/finder-app CROSS_COMPILE=aarch64-none-linux-gnu-
+make -C $FINDER_APP_DIR clean
+make -C $FINDER_APP_DIR CROSS_COMPILE=aarch64-none-linux-gnu-
 
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
 cd ${OUTDIR}/rootfs
-cp ~/projects/assignment-1-TalHal/finder-app/finder.sh ./home/
-cp ~/projects/assignment-1-TalHal/finder-app/finder-test.sh ./home/
-cp ~/projects/assignment-1-TalHal/finder-app/writer ./home/
+cp $FINDER_APP_DIR/finder.sh ./home/
+cp $FINDER_APP_DIR/finder-test.sh ./home/
+cp $FINDER_APP_DIR/writer ./home/
 mkdir ./home/conf
-cp ~/projects/assignment-1-TalHal/finder-app/conf/username.txt ./home/conf
-cp ~/projects/assignment-1-TalHal/finder-app/conf/assignment.txt ./home/conf
-cp ~/projects/assignment-1-TalHal/finder-app/autorun-qemu.sh ./home/
+cp $FINDER_APP_DIR/conf/username.txt ./home/conf
+cp $FINDER_APP_DIR/conf/assignment.txt ./home/conf
+cp $FINDER_APP_DIR/autorun-qemu.sh ./home/
 
 # TODO: Chown the root directory
 cd ${OUTDIR}/rootfs
