@@ -45,7 +45,7 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
 
 fi
 
-cp ${OUTDIR}/linux-stable/arch/arm64/boot/Image ~/projects/aeld/
+cp ${OUTDIR}/linux-stable/arch/arm64/boot/Image ${OUTDIR}
 
 echo "Adding the Image in outdir"
 
