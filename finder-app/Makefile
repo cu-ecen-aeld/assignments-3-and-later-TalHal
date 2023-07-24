@@ -12,6 +12,8 @@ CFLAGS=-I.
 
 OBJ = writer.o 
 
+all: $(APP_NAME)
+
 %.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 
