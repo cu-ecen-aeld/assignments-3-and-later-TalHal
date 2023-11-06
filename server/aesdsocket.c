@@ -11,9 +11,13 @@
 #include <errno.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include<signal.h>
+#include <signal.h>
+#include <pthread.h>
+#include <sys/queue.h>
+#include <time.h>
+#include <sys/time.h>
 
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 #define dprintf(...) printf(__VA_ARGS__)
 #define dbg_print(...) printf(__VA_ARGS__)
@@ -28,6 +32,72 @@
 
 int filefd;
 int fd;
+pthread_mutex_t write_mutex;
+
+
+struct slist_data {
+	pthread_t id;
+	int newfd;
+	bool finished;
+	SLIST_ENTRY(slist_data) entries;
+
+};
+
+SLIST_HEAD(slist_pth, slist_data) head;
+
+void timer_callback();
+
+struct slist_data *insert_list(struct slist_pth* head, int newfd)
+{
+	struct slist_data *new_node = (struct slist_data *)malloc(sizeof(struct slist_data));
+	
+	printf("Alloced new_node=%p\n", new_node);
+	new_node->newfd = newfd;
+	new_node->finished = false;
+	SLIST_INSERT_HEAD(head, new_node, entries);
+	return new_node;
+}
+
+
+
+void destroy_element(struct slist_pth* head, pthread_t id) 
+{
+	struct slist_data *item, *tmp_item;
+	int found = false;
+
+	SLIST_FOREACH(item, head, entries) 
+	{
+	
+		if(item->id == id)
+		{
+			found = true;
+			break;
+		}
+	
+	};
+
+	if (found == true)
+	{
+		SLIST_REMOVE(head, item, slist_data, entries);
+		printf("free item=%p\n", item);
+		free(item);
+	}
+	
+   
+}
+
+#if 0
+void print_list(struct slist_pth* head)
+{
+	struct slist_data* ptr;
+
+	SLIST_FOREACH(ptr, head, entries)
+        {
+                printf("val: %d\n", ptr->val);
+        }
+
+}
+#endif
 
 void sig_handler(int signo)
 {
@@ -42,20 +112,200 @@ void sig_handler(int signo)
 }
 
 
-int main(int argc, char **argv)
+void* timer_thread(void* arg)
 {
-	int rc, newfd;
-	struct sockaddr_in serv_addr, cli_addr;
-	char cli_address_str[10];
-	unsigned char *buffer, *rbuff;
+	sleep(2);
+	while (1)
+	{
+		sleep(10);
+		timer_callback();
+	}
+
+}
+
+void* thread_func(void* arg)
+{
+	int i = 0, rc;
+	unsigned char *buffer;
+	bool newline_in_packet = false;
+	int off_buff = 0;
 	struct stat st;
 	long filesize;
-	socklen_t peer_addr_size;
+	unsigned char *rbuff;
+	
+	struct slist_data *item = (struct slist_data *)arg;
+	
+	rc = pthread_mutex_lock(&write_mutex);
+	if (rc != 0)
+	{
+		printf("mutex lock failed!");
+		return NULL;
+	}
+	buffer = (unsigned char *)malloc(BUFFER_SIZE);
+	if (!buffer) {
+		printf("allocation failed\n");
+		return NULL;
+	}
+
+	while (!newline_in_packet) {
+		int rc = recv(item->newfd, buffer + off_buff, BUFFER_SIZE, 0);
+		if (rc < 0) {
+			perror("recv failed\n");
+			free(buffer);
+			return NULL;
+		}
+		
+		dbg_print("got %d bytes\n", rc);
+		
+	
+		for (i = 0; i < rc; i++) {
+			dbg_print("%c", buffer[off_buff + i]);
+		}
+	
+		
+		off_buff += rc;
+		
+		if (buffer[off_buff - 1] == '\n') {
+			newline_in_packet = true;
+		}
+		
+	
+	}
+	
+	
+	rc = write(filefd, buffer, off_buff);
+	if (rc < 0) {
+		perror("write failed\n");
+		free(buffer);
+		return NULL;
+	}
+
+	
+	free(buffer);
+
+
+	stat(FILENAME, &st);
+	filesize = st.st_size;
+	printf("filesize:%ld\n", filesize);
+	rbuff = (unsigned char *)malloc(filesize);
+	if (!rbuff) {
+		
+		return NULL;
+	}
+
+	rc = lseek(filefd, 0, SEEK_SET);
+	if (rc < 0) {
+		perror("lseek failed");
+		free(rbuff);
+		return NULL;
+	}
+	
+	rc = read(filefd, rbuff, filesize);
+	if (rc < 0) {
+		perror("read failed\n");
+		free(rbuff);
+		return NULL;
+	}
+	
+	
+
+	printf("rbuff:");	
+	for (i = 0; i < filesize; i++) {
+		printf("%c", rbuff[i]);
+		
+	}
+
+
+	rc = send(item->newfd, rbuff, filesize, 0);
+	if (rc < 0) {
+		perror("send failed\n");
+		free(rbuff);
+		return NULL;
+	}
+	
+	rc = pthread_mutex_unlock(&write_mutex);
+	if (rc != 0)
+	{
+		printf("mutex unlock failed!");
+		return NULL;
+	}
+	
+	item->finished = true;
+	free(rbuff);
+}
+
+#define Size 50
+
+void timer_callback(void)
+{
+	int rc;
+	time_t t ;
+	struct tm *tmp ;
+	char MY_TIME[Size];
+	char line[Size + 2];
+	time( &t );
+
+	//localtime() uses the time pointed by t ,
+	// to fill a tm structure with the 
+	// values that represent the 
+	// corresponding local time.
+	
+	printf("timer_callback called !\n");
+
+	tmp = localtime( &t );
+
+	// using strftime to display time
+	strftime(MY_TIME, sizeof(MY_TIME), "timestamp:%Y %m %e %H %M %S", tmp);
+	sprintf(line,"%s\n", MY_TIME);
+
+	//printf("timestamp:%s\n", MY_TIME );
+	
+	rc = pthread_mutex_lock(&write_mutex);
+	if (rc != 0)
+	{
+		printf("mutex lock failed from timer!");
+		return;
+	}
+	rc = write(filefd, line, strlen(line));
+	if (rc < 0) {
+		perror("write failed\n");
+		close(filefd);
+		return;
+	}
+
+	rc = pthread_mutex_unlock(&write_mutex);
+	if (rc != 0)
+	{
+		printf("mutex unlock failed from timer!");
+		return;
+	}
+}
+  
+#define CLOCKID CLOCK_REALTIME
+#define SIG SIGRTMIN
+int main(int argc, char **argv)
+{
+	int rc, newfd, nready;
+	struct sockaddr_in serv_addr, cli_addr;
+	char cli_address_str[10];
+	socklen_t peer_addr_size = 0;
 	struct sigaction new_action;
 	bool isdaemon = false;
 	pid_t pid;
+	fd_set rset; 
+	int maxfdp1;
+	timer_t            timerid;
+	sigset_t           mask;
+	struct sigevent    sev;
+	struct sigaction   sa;
+	struct itimerspec  its;
 	
-	printf("argc=%d\n", argc);
+	if (pthread_mutex_init(&write_mutex, NULL) != 0) { 
+		printf("\n mutex init has failed\n"); 
+		return -1; 
+	} 
+
+    
 	if (argc > 1) {
 		if (!strcmp(argv[1], "-d")) {
 			isdaemon = true;
@@ -81,6 +331,19 @@ int main(int argc, char **argv)
 		perror("open failed\n");
 		return -1;
 	}
+	
+	
+	pthread_t id;
+
+#if 1	
+	rc = pthread_create(&id, NULL, timer_thread, NULL);
+	if (rc != 0)
+	{
+		printf("pthread_create trimer_thread failed\n");
+		return -1;
+	}
+ 
+#endif
 
 	fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -125,109 +388,91 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	
+	// clear the descriptor set 
+	
+	
+	struct timeval timeout;
+	timeout.tv_sec = 3; 
+    	timeout.tv_usec = 0; 
+	
 	while (1) {
-		newfd = accept(fd, (struct sockaddr *)&cli_addr, &peer_addr_size);
-
-		if (newfd < 0) {
-			perror("accept failed\n");
-			close(fd);
-			return -1;
-		}
-
-		openlog("server", LOG_PID, LOG_USER);
-
-		inet_ntop(AF_INET, &cli_addr.sin_addr, cli_address_str, sizeof(cli_address_str));
-		dprintf("Accepted connection from %s\n", cli_address_str);
-
-		buffer = (unsigned char *)malloc(BUFFER_SIZE);
-		if (!buffer) {
-			printf("allocation failed\n");
-			close(filefd);
-			close(fd);
-			return -1;
-		}
-
-		int i = 0;
-		bool newline_in_packet = false;
-		int off_buff = 0;
+	
+		FD_ZERO(&rset); 
+		maxfdp1 = fd + 1; 
+		FD_SET(fd, &rset);
 		
-		while (!newline_in_packet) {
-			int rc = recv(newfd, buffer + off_buff, BUFFER_SIZE, 0);
-			if (rc < 0) {
-				perror("recv failed\n");
-				close(filefd);
-				close(fd);
-				return -1;
+		// select the ready descriptor 
+		nready = select(maxfdp1, &rset, NULL, NULL, &timeout); 
+		
+		if (nready < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			printf("select failed\n");
+			return -1;
+		}
+		else 
+		{
+			if (FD_ISSET(fd, &rset)) 
+			{ 
+				int cont_accept = 1;
+				
+				while (cont_accept)
+				{
+					newfd = accept(fd, (struct sockaddr *)&cli_addr, &peer_addr_size);
+
+					if (newfd < 0) 
+					{
+
+						if (errno != EINTR)
+						{
+							perror("accept failed\n");
+							close(fd);
+							return -1;
+						}
+					}
+					else
+					{
+						cont_accept = 0;
+					}
+				}
+
+				openlog("server", LOG_PID, LOG_USER);
+
+				inet_ntop(AF_INET, &cli_addr.sin_addr, cli_address_str, sizeof(cli_address_str));
+				printf("Accepted connection from %s\n", cli_address_str);
+
+				struct slist_data *new_item = insert_list(&head, newfd);
+				
+				pthread_create(&new_item->id, NULL, thread_func, (void *)new_item);
+				
+				printf("new_item->id=%ld\n", new_item->id);
+				
+				
+
+				
 			}
 			
-			dbg_print("got %d bytes\n", rc);
+			struct slist_data *iter;
+			SLIST_FOREACH(iter, &head, entries) 
+			{
 			
-		
-			for (i = 0; i < rc; i++) {
-				dbg_print("%c", buffer[off_buff + i]);
-			}
-		
+				if (iter->finished == true)
+				{
+					pthread_join(iter->id, NULL);
+					
+					destroy_element(&head, iter->id); 
+
+					break;
+					
+				}
 			
-			off_buff += rc;
-			
-			if (buffer[off_buff - 1] == '\n') {
-				newline_in_packet = true;
-			}
-			
-		
+			};
 		}
 		
 		
-		rc = write(filefd, buffer, off_buff);
-		if (rc < 0) {
-			perror("write failed\n");
-			close(filefd);
-			close(fd);
-			return -1;
-		}
-
-
-		stat(FILENAME, &st);
-		filesize = st.st_size;
-		dbg_print("filesize:%ld\n", filesize);
-		rbuff = (unsigned char *)malloc(filesize);
-		if (!rbuff) {
-			close(filefd);
-			close(fd);
-			return -1;
-		}
-
-		rc = lseek(filefd, 0, SEEK_SET);
-		if (rc < 0) {
-			perror("lseek failed");
-			close(filefd);
-			close(fd);
-			return -1;
-		}
 		
-		rc = read(filefd, rbuff, filesize);
-		if (rc < 0) {
-			perror("read failed\n");
-			close(filefd);
-			close(fd);
-			return -1;
-		}
-		
-		for (i = 0; i < filesize; i++) {
-			dbg_print("%c", rbuff[i]);
-			
-		}
-
-
-		rc = send(newfd, rbuff, filesize, 0);
-		if (rc < 0) {
-			perror("send failed\n");
-			close(filefd);
-			close(fd);
-			return -1;
-		}
-
-		dprintf("Closed connection from %s\n", cli_address_str);
 	}
 
 

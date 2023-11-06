@@ -8,7 +8,7 @@ CC=gcc
 endif
 
 APP_NAME=aesdsocket
-CFLAGS=-I.
+CFLAGS=-I. -lpthread -lrt
 
 OBJ = aesdsocket.o 
 
