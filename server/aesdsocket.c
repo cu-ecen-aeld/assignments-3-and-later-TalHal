@@ -299,18 +299,32 @@ int main(int argc, char **argv)
 	struct sigevent    sev;
 	struct sigaction   sa;
 	struct itimerspec  its;
-	
+
+
+	if (argc > 1) {
+		if (!strcmp(argv[1], "-d")) {
+			isdaemon = true;
+		}
+	}
+
+	if (isdaemon) {
+		pid = fork();
+		if (pid < -1) {
+			printf("fork failed.. exiting ..");
+			exit(-1);
+		} else if (pid > 0) { // parent
+			// Let the parent terminate
+			exit(0);
+		}
+	}
+
+
 	if (pthread_mutex_init(&write_mutex, NULL) != 0) { 
 		printf("\n mutex init has failed\n"); 
 		return -1; 
 	} 
 
     
-	if (argc > 1) {
-		if (!strcmp(argv[1], "-d")) {
-			isdaemon = true;
-		}
-	}
 	memset(&new_action, 0, sizeof(struct sigaction));
 	
 	new_action.sa_handler = sig_handler;
@@ -368,16 +382,6 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	
-	if (isdaemon) {
-		pid = fork();
-		if (pid < -1) {
-			printf("fork failed.. exiting ..");
-			exit(-1);
-		} else if (pid > 0) { // parent
-			// Let the parent terminate
-			exit(0);
-		}
-	}
 
 	rc = listen(fd, 10);
 
