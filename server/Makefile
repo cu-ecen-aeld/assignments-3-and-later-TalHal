@@ -1,11 +1,11 @@
 
-$(info CROSS_COMPILE=${CROSS_COMPILE})
+$(info CC=${CC})
 
-ifneq (${CROSS_COMPILE},)
-CC=${CROSS_COMPILE}gcc
-else
-CC=gcc
-endif
+#ifneq (${CROSS_COMPILE},)
+#CC=${CROSS_COMPILE}gcc
+#else
+#CC=gcc
+#endif
 
 APP_NAME=aesdsocket
 CFLAGS=-I. -lpthread -lrt
