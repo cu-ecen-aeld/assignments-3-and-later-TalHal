@@ -12,10 +12,13 @@
 #include <linux/string.h>
 #else
 #include <string.h>
+#include <pthread.h>
 #endif
 
 #include "aesd-circular-buffer.h"
 
+
+pthread_mutex_t lock;
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
@@ -29,9 +32,37 @@
 struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
             size_t char_offset, size_t *entry_offset_byte_rtn )
 {
-    /**
-    * TODO: implement per description
-    */
+
+    int i = buffer->out_offs;
+    struct aesd_buffer_entry *entry = &buffer->entry[i];
+    size_t sumb = 0;
+
+
+    pthread_mutex_lock(&lock);
+    
+    do
+    {
+        size_t diff = char_offset - sumb;
+	
+	if (entry->size > diff) 
+        {
+		*entry_offset_byte_rtn = diff;
+		pthread_mutex_unlock(&lock);
+		return entry;
+        }
+        
+        sumb += entry->size;
+
+        i++;
+        if (i == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
+            i = 0;
+	
+        entry = &buffer->entry[i];
+
+    } while (i != buffer->out_offs);
+
+    pthread_mutex_unlock(&lock);
+
     return NULL;
 }
 
@@ -44,9 +75,34 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    /**
-    * TODO: implement per description
-    */
+    
+    pthread_mutex_lock(&lock);
+
+
+    memcpy(&buffer->entry[buffer->in_offs], add_entry, sizeof(struct aesd_buffer_entry));
+
+    buffer->in_offs++;
+
+    if (buffer->in_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
+        buffer->in_offs = 0;
+   
+    if (buffer->full == true)
+    {
+         buffer->out_offs++;
+         if (buffer->out_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
+             buffer->out_offs = 0;
+
+    } 
+
+    if (buffer->in_offs == buffer->out_offs)
+    {
+        buffer->full = true;
+    }
+
+
+    pthread_mutex_unlock(&lock);
+ 	
+	
 }
 
 /**
@@ -55,4 +111,5 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
 void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
+    pthread_mutex_init(&lock, NULL);
 }
