@@ -18,7 +18,11 @@
 #include "aesd-circular-buffer.h"
 
 
+#ifdef __KERNEL__
+#else
 pthread_mutex_t lock;
+#endif
+
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
@@ -37,9 +41,11 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     struct aesd_buffer_entry *entry = &buffer->entry[i];
     size_t sumb = 0;
 
-
+#ifdef __KERNEL__
+#else
     pthread_mutex_lock(&lock);
-    
+#endif
+
     do
     {
         size_t diff = char_offset - sumb;
@@ -47,7 +53,12 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 	if (entry->size > diff) 
         {
 		*entry_offset_byte_rtn = diff;
+
+#ifdef __KERNEL__
+#else
 		pthread_mutex_unlock(&lock);
+#endif
+
 		return entry;
         }
         
@@ -61,7 +72,10 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 
     } while (i != buffer->out_offs);
 
+#ifdef __KERNEL__
+#else
     pthread_mutex_unlock(&lock);
+#endif
 
     return NULL;
 }
@@ -75,9 +89,11 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    
-    pthread_mutex_lock(&lock);
 
+#ifdef __KERNEL__
+#else	
+    pthread_mutex_lock(&lock);
+#endif
 
     memcpy(&buffer->entry[buffer->in_offs], add_entry, sizeof(struct aesd_buffer_entry));
 
@@ -99,9 +115,10 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
         buffer->full = true;
     }
 
-
+#ifdef __KERNEL__
+#else
     pthread_mutex_unlock(&lock);
- 	
+#endif	
 	
 }
 
@@ -111,5 +128,10 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
 void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
+
+#ifdef __KERNEL__
+#else
     pthread_mutex_init(&lock, NULL);
+#endif
+
 }

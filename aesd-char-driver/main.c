@@ -17,7 +17,11 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
+#include <linux/slab.h>
+#include <linux/uaccess.h>
 #include "aesdchar.h"
+#include "aesd-circular-buffer.h"
+
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -48,10 +52,20 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
     ssize_t retval = 0;
+    size_t offset_in_entry;
+    struct aesd_buffer_entry *entry;
+
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
     /**
      * TODO: handle read
      */
+
+    entry = aesd_circular_buffer_find_entry_offset_for_fpos(&aesd_device.buffer, *f_pos, &offset_in_entry);
+    
+    retval = entry->size > count ? count : entry->size;
+    copy_to_user(buf, entry->buffptr, retval);
+    *f_pos += retval;
+
     return retval;
 }
 
@@ -59,10 +73,25 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
     ssize_t retval = -ENOMEM;
+    struct aesd_buffer_entry entry;
+
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
     /**
      * TODO: handle write
      */
+
+    entry.buffptr = (char *)kmalloc(count, GFP_KERNEL);
+    if (!entry.buffptr) {
+    	printk("Error: No memory allocated\n");
+	return 0;
+    }
+
+    copy_from_user(entry.buffptr, buf, count);
+
+    aesd_circular_buffer_add_entry(&aesd_device.buffer, &entry);
+
+    *f_pos += count;
+
     return retval;
 }
 struct file_operations aesd_fops = {
@@ -105,6 +134,8 @@ int aesd_init_module(void)
     /**
      * TODO: initialize the AESD specific portion of the device
      */
+    aesd_device.buffer.full = false;
+
 
     result = aesd_setup_cdev(&aesd_device);
 
@@ -118,12 +149,18 @@ int aesd_init_module(void)
 void aesd_cleanup_module(void)
 {
     dev_t devno = MKDEV(aesd_major, aesd_minor);
+    struct aesd_buffer_entry *entry;
+    int index = 0;
 
     cdev_del(&aesd_device.cdev);
 
     /**
      * TODO: cleanup AESD specific poritions here as necessary
      */
+
+    AESD_CIRCULAR_BUFFER_FOREACH(entry, &aesd_device.buffer, index) {
+        kfree(entry->buffptr);
+    }
 
     unregister_chrdev_region(devno, 1);
 }
