@@ -62,7 +62,16 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     entry = aesd_circular_buffer_find_entry_offset_for_fpos(&aesd_device.buffer, *f_pos, &offset_in_entry);
     
+    if (!entry) {
+    	return 0;
+    }
+
+    PDEBUG("offset_in_entry=%lu, entry->buffptr=%s, entry->size=%lu\n", offset_in_entry, entry->buffptr, entry->size);
+    
     retval = entry->size > count ? count : entry->size;
+
+    PDEBUG("%s(): retval=%lu\n", __func__, retval);
+
     copy_to_user(buf, entry->buffptr, retval);
     *f_pos += retval;
 
@@ -74,23 +83,60 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
     ssize_t retval = -ENOMEM;
     struct aesd_buffer_entry entry;
+    char* temp;
+    size_t total;
 
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
     /**
      * TODO: handle write
      */
 
-    entry.buffptr = (char *)kmalloc(count, GFP_KERNEL);
-    if (!entry.buffptr) {
+    total = count + aesd_device.temp_buf_size;
+    
+    temp = (char *)kmalloc(total, GFP_KERNEL);
+    if (!temp) {
     	printk("Error: No memory allocated\n");
-	return 0;
+	return retval;
     }
 
-    copy_from_user(entry.buffptr, buf, count);
+    if (aesd_device.temp_buf != NULL) {
+    	memcpy(temp, aesd_device.temp_buf, aesd_device.temp_buf_size);
+    }
 
-    aesd_circular_buffer_add_entry(&aesd_device.buffer, &entry);
+    if (copy_from_user(temp + aesd_device.temp_buf_size, buf, count) != 0) {
+        printk("copy_from_user failed");
+        return 0;	
+    }
 
-    *f_pos += count;
+    if (temp[total - 1] == '\n') {
+    	
+	entry.buffptr = temp;
+    
+        entry.size = total;
+
+        aesd_circular_buffer_add_entry(&aesd_device.buffer, &entry);
+
+        *f_pos += count;
+
+        retval = count;
+
+        if (aesd_device.temp_buf != NULL) {
+            kfree(aesd_device.temp_buf);
+	    aesd_device.temp_buf = NULL;
+	    aesd_device.temp_buf_size = 0;
+	}
+
+    
+    } else {
+
+        if (aesd_device.temp_buf)
+		kfree(aesd_device.temp_buf);
+
+	aesd_device.temp_buf = temp;
+	aesd_device.temp_buf_size += count;
+	retval = count;
+    }
+
 
     return retval;
 }
@@ -134,7 +180,12 @@ int aesd_init_module(void)
     /**
      * TODO: initialize the AESD specific portion of the device
      */
+
+    PDEBUG("%s(): << \n", __func__);
+    
     aesd_device.buffer.full = false;
+    aesd_device.temp_buf = NULL;
+    aesd_device.temp_buf_size = 0;
 
 
     result = aesd_setup_cdev(&aesd_device);

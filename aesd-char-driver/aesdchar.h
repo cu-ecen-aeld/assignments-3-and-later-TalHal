@@ -32,6 +32,8 @@ struct aesd_dev
      */
     struct cdev cdev;     /* Char device structure      */
     struct aesd_circular_buffer buffer;
+    char *temp_buf;
+    size_t temp_buf_size;
 };
 
 
