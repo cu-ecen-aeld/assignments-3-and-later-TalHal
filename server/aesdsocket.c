@@ -28,7 +28,12 @@
 
 
 #define BUFFER_SIZE 40000
-#define FILENAME "/var/tmp/aesdsocketdata" 
+
+#ifdef USE_AESD_CHAR_DEVICE
+#define FILENAME "/dev/aesdchar"
+#else
+#define FILENAME "/var/tmp/aesdsocketdata"
+#endif
 
 int filefd;
 int fd;
@@ -106,7 +111,7 @@ void sig_handler(int signo)
 		close(filefd);
 		closelog();
 		close(fd);
-		remove(FILENAME);
+		//remove(FILENAME);
 		
 	}
 }
@@ -144,6 +149,7 @@ void* thread_func(void* arg)
 	buffer = (unsigned char *)malloc(BUFFER_SIZE);
 	if (!buffer) {
 		printf("allocation failed\n");
+		pthread_mutex_unlock(&write_mutex);
 		return NULL;
 	}
 
@@ -152,6 +158,7 @@ void* thread_func(void* arg)
 		if (rc < 0) {
 			perror("recv failed\n");
 			free(buffer);
+			pthread_mutex_unlock(&write_mutex);
 			return NULL;
 		}
 		
@@ -177,19 +184,22 @@ void* thread_func(void* arg)
 	if (rc < 0) {
 		perror("write failed\n");
 		free(buffer);
+		pthread_mutex_unlock(&write_mutex);
 		return NULL;
 	}
+
+	printf("writing buffer:%s\n", buffer);
 
 	
 	free(buffer);
 
 
-	stat(FILENAME, &st);
-	filesize = st.st_size;
-	printf("filesize:%ld\n", filesize);
-	rbuff = (unsigned char *)malloc(filesize);
+//	stat(FILENAME, &st);
+//	filesize = st.st_size;
+//	printf("filesize:%ld\n", filesize);
+	rbuff = (unsigned char *)malloc(131072);
 	if (!rbuff) {
-		
+		pthread_mutex_unlock(&write_mutex);
 		return NULL;
 	}
 
@@ -197,29 +207,49 @@ void* thread_func(void* arg)
 	if (rc < 0) {
 		perror("lseek failed");
 		free(rbuff);
+		pthread_mutex_unlock(&write_mutex);
 		return NULL;
 	}
-	
-	rc = read(filefd, rbuff, filesize);
-	if (rc < 0) {
-		perror("read failed\n");
-		free(rbuff);
-		return NULL;
-	}
-	
-	
 
-	printf("rbuff:");	
-	for (i = 0; i < filesize; i++) {
+	rc = 0;
+	int sum = 0;
+
+        while (1)
+	{
+
+		rc = read(filefd, rbuff + sum, 131072);
+		
+		if (rc >= 131072 || rc == 0)
+		      break;	
+
+		if (rc < 0) {
+			perror("read failed\n");
+			free(rbuff);
+			pthread_mutex_unlock(&write_mutex);
+			return NULL;
+		}
+
+		sum += rc;
+
+
+        }
+	
+      	printf("rc=%d\n", rc);
+
+	int len = strlen(rbuff);
+
+	printf("rbuff: len=%d\n", len);	
+	for (i = 0; i < len; i++) {
 		printf("%c", rbuff[i]);
 		
 	}
 
 
-	rc = send(item->newfd, rbuff, filesize, 0);
+	rc = send(item->newfd, rbuff, len, 0);
 	if (rc < 0) {
 		perror("send failed\n");
 		free(rbuff);
+		pthread_mutex_unlock(&write_mutex);
 		return NULL;
 	}
 	
@@ -349,7 +379,7 @@ int main(int argc, char **argv)
 	
 	pthread_t id;
 
-#if 1	
+#ifndef USE_AESD_CHAR_DEVICE	
 	rc = pthread_create(&id, NULL, timer_thread, NULL);
 	if (rc != 0)
 	{

@@ -8,6 +8,7 @@
 #ifndef AESD_CHAR_DRIVER_AESDCHAR_H_
 #define AESD_CHAR_DRIVER_AESDCHAR_H_
 
+#include <linux/mutex.h>
 #include "aesd-circular-buffer.h"
 
 #define AESD_DEBUG 1  //Remove comment on this line to enable debug
@@ -34,6 +35,7 @@ struct aesd_dev
     struct aesd_circular_buffer buffer;
     char *temp_buf;
     size_t temp_buf_size;
+    struct mutex aesd_mutex;
 };
 
 
