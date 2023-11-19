@@ -37,7 +37,7 @@
 #define FILENAME "/var/tmp/aesdsocketdata"
 #endif
 
-int filefd;
+
 int fd;
 pthread_mutex_t write_mutex;
 
@@ -110,7 +110,6 @@ void sig_handler(int signo)
 {
 	if (signo == SIGINT || signo == SIGTERM) {
 		dprintf("Caught signal, exiting\n");
-		close(filefd);
 		closelog();
 		close(fd);
 		//remove(FILENAME);
@@ -139,8 +138,15 @@ void* thread_func(void* arg)
 	struct stat st;
 	long filesize;
 	unsigned char *rbuff;
+	int filefd;
 	
 	struct slist_data *item = (struct slist_data *)arg;
+	
+	filefd = open(FILENAME, O_RDWR | O_APPEND | O_CREAT, 0x777);
+	if (filefd < 0) {
+		perror("open failed\n");
+		return NULL;
+	}
 	
 	rc = pthread_mutex_lock(&write_mutex);
 	if (rc != 0)
@@ -148,10 +154,12 @@ void* thread_func(void* arg)
 		printf("mutex lock failed!");
 		return NULL;
 	}
+	
 	buffer = (unsigned char *)malloc(BUFFER_SIZE);
 	if (!buffer) {
 		printf("allocation failed\n");
 		pthread_mutex_unlock(&write_mutex);
+		close(filefd);
 		return NULL;
 	}
 
@@ -161,6 +169,7 @@ void* thread_func(void* arg)
 			perror("recv failed\n");
 			free(buffer);
 			pthread_mutex_unlock(&write_mutex);
+			close(filefd);
 			return NULL;
 		}
 		
@@ -187,6 +196,7 @@ void* thread_func(void* arg)
 		perror("write failed\n");
 		free(buffer);
 		pthread_mutex_unlock(&write_mutex);
+		close(filefd);
 		return NULL;
 	}
 
@@ -210,6 +220,7 @@ void* thread_func(void* arg)
 		perror("lseek failed");
 		free(rbuff);
 		pthread_mutex_unlock(&write_mutex);
+		close(filefd);
 		return NULL;
 	}
 
@@ -228,6 +239,7 @@ void* thread_func(void* arg)
 			perror("read failed\n");
 			free(rbuff);
 			pthread_mutex_unlock(&write_mutex);
+			close(filefd);
 			return NULL;
 		}
 
@@ -252,6 +264,7 @@ void* thread_func(void* arg)
 		perror("send failed\n");
 		free(rbuff);
 		pthread_mutex_unlock(&write_mutex);
+		close(filefd);
 		return NULL;
 	}
 	
@@ -259,11 +272,13 @@ void* thread_func(void* arg)
 	if (rc != 0)
 	{
 		printf("mutex unlock failed!");
+		close(filefd);
 		return NULL;
 	}
 	
 	item->finished = true;
 	free(rbuff);
+	close(filefd);
 }
 
 #define Size 50
@@ -275,7 +290,15 @@ void timer_callback(void)
 	struct tm *tmp ;
 	char MY_TIME[Size];
 	char line[Size + 2];
+	int filefd;
+	
 	time( &t );
+	
+	filefd = open(FILENAME, O_RDWR | O_APPEND | O_CREAT, 0x777);
+	if (filefd < 0) {
+		perror("open failed\n");
+		return;
+	}
 
 	//localtime() uses the time pointed by t ,
 	// to fill a tm structure with the 
@@ -309,8 +332,11 @@ void timer_callback(void)
 	if (rc != 0)
 	{
 		printf("mutex unlock failed from timer!");
+		close(filefd);
 		return;
 	}
+	
+	close(filefd);
 }
   
 #define CLOCKID CLOCK_REALTIME
@@ -372,12 +398,6 @@ int main(int argc, char **argv)
   		return -1;
   	}
 
-	filefd = open(FILENAME, O_RDWR | O_APPEND | O_CREAT, 0x777);
-	if (filefd < 0) {
-		perror("open failed\n");
-		return -1;
-	}
-	
 	
 	pthread_t id;
 
@@ -395,7 +415,7 @@ int main(int argc, char **argv)
 
 	if (fd < 0) {
 		perror("socket failed\n");
-		close(filefd);
+		
 		return -1;
 	}
 
@@ -409,7 +429,6 @@ int main(int argc, char **argv)
 
 	if (rc < 0) {
 		perror("bind failed\n");
-		close(filefd);
 		close(fd);
 		return -1;
 	}
@@ -419,7 +438,6 @@ int main(int argc, char **argv)
 
 	if (rc < 0) {
 		perror("Listen failed\n");
-		close(filefd);
 		close(fd);
 		return -1;
 	}
@@ -512,8 +530,6 @@ int main(int argc, char **argv)
 	}
 
 
-
-	close(filefd);
 	closelog();
 	close(fd);
 
