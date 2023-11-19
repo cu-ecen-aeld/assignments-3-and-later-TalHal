@@ -29,6 +29,8 @@
 
 #define BUFFER_SIZE 40000
 
+#define USE_AESD_CHAR_DEVICE
+
 #ifdef USE_AESD_CHAR_DEVICE
 #define FILENAME "/dev/aesdchar"
 #else
