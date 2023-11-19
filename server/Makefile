@@ -10,7 +10,7 @@ endif
 APP_NAME=aesdsocket
 CFLAGS=-I. -lpthread -lrt
 
-USE_AESD_CHAR_DEVICE ?= 1
+USE_AESD_CHAR_DEVICE = 1
 
 ifeq (${USE_AESD_CHAR_DEVICE}, 1)
 CFLAGS+= -DUSE_AESD_CHAR_DEVICE
