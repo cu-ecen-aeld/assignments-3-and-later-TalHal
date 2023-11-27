@@ -50,6 +50,7 @@ struct aesd_circular_buffer
      */
     bool full;
 
+    int entry_num;
     /*
      * total buffer size
      * */
@@ -63,6 +64,7 @@ extern void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
 
 extern void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer);
 
+extern int aesd_circular_buffer_get_offset(struct aesd_circular_buffer *buffer, uint32_t entry_index, uint32_t entry_in_offset);
 /**
  * Create a for loop to iterate over each member of the circular buffer.
  * Useful when you've allocated memory for circular buffer entries and need to free it

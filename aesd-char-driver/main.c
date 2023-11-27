@@ -21,6 +21,7 @@
 #include <linux/uaccess.h>
 #include "aesdchar.h"
 #include "aesd-circular-buffer.h"
+#include "aesd_ioctl.h"
 
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
@@ -75,9 +76,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     struct aesd_buffer_entry *entry;
 
     PDEBUG("%s(): read %zu bytes with offset %lld",__func__, count,*f_pos);
-    /**
-     * TODO: handle read
-     */
 
     mutex_lock(&aesd_device.aesd_mutex);
     entry = aesd_circular_buffer_find_entry_offset_for_fpos(&aesd_device.buffer, *f_pos, &offset_in_entry);
@@ -168,13 +166,49 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     return retval;
 }
+
+
+static long aesd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    struct aesd_seekto msg;
+    long ret = 0;
+
+    switch(cmd) {
+        case AESDCHAR_IOCSEEKTO:
+            if (copy_from_user(&msg ,(struct aesd_seekto*) arg, sizeof(struct aesd_seekto)))
+            {
+                pr_err("Data Write: Err!\n");
+		ret = -1;
+            }
+	    else
+	    {
+	    
+	        printk("write_cmd = %u, write_cmd_offset = %u \n", msg.write_cmd, msg.write_cmd_offset);
+            
+	    
+	        ret = aesd_circular_buffer_get_offset(&aesd_device.buffer, msg.write_cmd, msg.write_cmd_offset);
+
+                file->f_pos = ret;
+
+            }
+	    break;
+                
+        default:
+            pr_info("Default\n");
+            break;
+        }
+
+        return ret;
+}
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
-    .llseek = aesd_lseek
+    .llseek = aesd_lseek,
+    .unlocked_ioctl = aesd_ioctl
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)

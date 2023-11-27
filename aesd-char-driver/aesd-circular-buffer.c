@@ -23,6 +23,46 @@
 pthread_mutex_t lock;
 #endif
 
+
+int aesd_circular_buffer_get_offset(struct aesd_circular_buffer *buffer, uint32_t entry_index, uint32_t entry_in_offset)
+{
+
+    int i = buffer->out_offs;
+    int j = 0;
+    int sum = 0;
+
+    if (entry_index > buffer->entry_num)
+    {
+	    printk("error: entry_index = %u bigger than %u\n", entry_index, buffer->entry_num);
+	    return -1;
+    }
+
+    while (j <= entry_index)
+    {
+        
+        size_t curr_size = buffer->entry[i].size;
+
+	sum += curr_size;
+        i++;
+
+	if (i == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
+            i = 0;
+
+	j++;
+
+    };
+
+    if (buffer->entry[i].size <= entry_in_offset)
+    {
+	    printk("error: entry_in_offset = %u, buffer->entry[%d].size = %lu \n", entry_in_offset, i, buffer->entry[i].size);
+	    return -1;
+    }
+
+    sum += entry_in_offset;
+
+    return sum;
+}
+
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
@@ -97,12 +137,15 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     {
         curr_size -= buffer->entry[buffer->in_offs].size;
         kfree(buffer->entry[buffer->in_offs].buffptr);
+	buffer->entry_num--;
     }
 
     memcpy(&buffer->entry[buffer->in_offs], add_entry, sizeof(struct aesd_buffer_entry));
 
 
     curr_size += add_entry->size;
+
+    buffer->entry_num++;
    
     buffer->buffer_size = curr_size;
 
