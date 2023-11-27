@@ -25,7 +25,7 @@
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
-MODULE_AUTHOR("Your Name Here"); /** TODO: fill in your name **/
+MODULE_AUTHOR("TalHal"); /** TODO: fill in your name **/
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
@@ -43,6 +43,11 @@ loff_t aesd_lseek(struct file *filp, loff_t offset, int whence)
        case SEEK_CUR:
            filp->f_pos += offset;
            break;
+
+       case SEEK_END:
+	   filp->f_pos = aesd_device.buffer.buffer_size + offset;
+	   break;
+
        default:
            return -EINVAL;
    }
@@ -53,18 +58,12 @@ loff_t aesd_lseek(struct file *filp, loff_t offset, int whence)
 int aesd_open(struct inode *inode, struct file *filp)
 {
     PDEBUG("open");
-    /**
-     * TODO: handle open
-     */
     return 0;
 }
 
 int aesd_release(struct inode *inode, struct file *filp)
 {
     PDEBUG("release");
-    /**
-     * TODO: handle release
-     */
     return 0;
 }
 
@@ -113,9 +112,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     size_t total;
 
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
-    /**
-     * TODO: handle write
-     */
 
     total = count + aesd_device.temp_buf_size;
     
@@ -144,7 +140,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         aesd_circular_buffer_add_entry(&aesd_device.buffer, &entry);
 
 
-        *f_pos += count;
+        *f_pos += total;
 
         retval = count;
 

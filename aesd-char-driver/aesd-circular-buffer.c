@@ -10,6 +10,7 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
+#include <linux/slab.h>
 #else
 #include <string.h>
 #include <pthread.h>
@@ -86,11 +87,24 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
 
+    size_t curr_size = buffer->buffer_size;
 #ifndef __KERNEL__
     pthread_mutex_lock(&lock);
 #endif
 
+    
+    if (buffer->entry[buffer->in_offs].buffptr != NULL)
+    {
+        curr_size -= buffer->entry[buffer->in_offs].size;
+        kfree(buffer->entry[buffer->in_offs].buffptr);
+    }
+
     memcpy(&buffer->entry[buffer->in_offs], add_entry, sizeof(struct aesd_buffer_entry));
+
+
+    curr_size += add_entry->size;
+   
+    buffer->buffer_size = curr_size;
 
     buffer->in_offs++;
 
