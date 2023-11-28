@@ -74,6 +74,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     ssize_t retval = 0;
     size_t offset_in_entry;
     struct aesd_buffer_entry *entry;
+    int left_in_entry;
 
     PDEBUG("%s(): read %zu bytes with offset %lld",__func__, count,*f_pos);
 
@@ -89,11 +90,13 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 
     PDEBUG("%s(): offset_in_entry=%lu, entry->buffptr=%s, entry->size=%lu\n", __func__, offset_in_entry, entry->buffptr, entry->size);
     
-    retval = entry->size > count ? count : entry->size;
+    left_in_entry = entry->size - offset_in_entry;
+
+    retval = left_in_entry > count ? count : left_in_entry;
 
     PDEBUG("%s(): retval=%lu\n", __func__, retval);
 
-    copy_to_user(buf, entry->buffptr, retval);
+    copy_to_user(buf, entry->buffptr + offset_in_entry, retval);
     *f_pos += retval;
 
     PDEBUG("=================");
@@ -177,13 +180,13 @@ static long aesd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         case AESDCHAR_IOCSEEKTO:
             if (copy_from_user(&msg ,(struct aesd_seekto*) arg, sizeof(struct aesd_seekto)))
             {
-                pr_err("Data Write: Err!\n");
+                pr_err("%s(): Data Write: Err!\n", __func__);
 		ret = -1;
             }
 	    else
 	    {
 	    
-	        printk("write_cmd = %u, write_cmd_offset = %u \n", msg.write_cmd, msg.write_cmd_offset);
+	        printk("%s(): write_cmd = %u, write_cmd_offset = %u \n", __func__, msg.write_cmd, msg.write_cmd_offset);
             
 	    
 	        ret = aesd_circular_buffer_get_offset(&aesd_device.buffer, msg.write_cmd, msg.write_cmd_offset);
@@ -194,7 +197,7 @@ static long aesd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	    break;
                 
         default:
-            pr_info("Default\n");
+            pr_info("%s(): Default\n", __func__);
             break;
         }
 

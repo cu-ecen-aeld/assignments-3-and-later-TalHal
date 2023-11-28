@@ -191,6 +191,8 @@ void* thread_func(void* arg)
 	
 	}
 
+	bool ioctl_string = false;
+
 	if (strncmp(buffer, "AESDCHAR_IOCSEEKTO:", 19) == 0) {
 		char *ptr;
 		char *ptr1;
@@ -203,21 +205,25 @@ void* thread_func(void* arg)
 		msg.write_cmd_offset = offset;
 
 		ioctl(filefd, AESDCHAR_IOCSEEKTO, &msg);
+
+		ioctl_string = true;
 	
 	}
 	
-	rc = write(filefd, buffer, off_buff);
-	if (rc < 0) {
-		perror("write failed\n");
-		free(buffer);
-		pthread_mutex_unlock(&write_mutex);
-		close(filefd);
-		return NULL;
+	if (ioctl_string == false) {
+		rc = write(filefd, buffer, off_buff);
+		if (rc < 0) {
+			perror("write failed\n");
+			free(buffer);
+			pthread_mutex_unlock(&write_mutex);
+			close(filefd);
+			return NULL;
+		}
+
+		printf("writing buffer:%s\n", buffer);
+
 	}
 
-	printf("writing buffer:%s\n", buffer);
-
-	
 	free(buffer);
 
 
@@ -230,13 +236,16 @@ void* thread_func(void* arg)
 		return NULL;
 	}
 
-	rc = lseek(filefd, 0, SEEK_SET);
-	if (rc < 0) {
-		perror("lseek failed");
-		free(rbuff);
-		pthread_mutex_unlock(&write_mutex);
-		close(filefd);
-		return NULL;
+	if (ioctl_string == false) {
+		rc = lseek(filefd, 0, SEEK_SET);
+		if (rc < 0) {
+			perror("lseek failed");
+			free(rbuff);
+			pthread_mutex_unlock(&write_mutex);
+			close(filefd);
+			return NULL;
+		}
+
 	}
 
 	rc = 0;
@@ -263,18 +272,18 @@ void* thread_func(void* arg)
 
         }
 	
-      	printf("rc=%d\n", rc);
+      	printf("rc=%d, sum=%d\n", rc, sum);
 
 	int len = strlen(rbuff);
 
 	printf("rbuff: len=%d\n", len);	
-	for (i = 0; i < len; i++) {
+	for (i = 0; i < sum; i++) {
 		printf("%c", rbuff[i]);
 		
 	}
 
 
-	rc = send(item->newfd, rbuff, len, 0);
+	rc = send(item->newfd, rbuff, sum, 0);
 	if (rc < 0) {
 		perror("send failed\n");
 		free(rbuff);
@@ -294,6 +303,8 @@ void* thread_func(void* arg)
 	item->finished = true;
 	free(rbuff);
 	close(filefd);
+
+	return NULL;
 }
 
 #define Size 50

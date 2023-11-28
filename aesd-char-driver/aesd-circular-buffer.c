@@ -37,7 +37,7 @@ int aesd_circular_buffer_get_offset(struct aesd_circular_buffer *buffer, uint32_
 	    return -1;
     }
 
-    while (j <= entry_index)
+    while (j < entry_index)
     {
         
         size_t curr_size = buffer->entry[i].size;
@@ -60,6 +60,7 @@ int aesd_circular_buffer_get_offset(struct aesd_circular_buffer *buffer, uint32_
 
     sum += entry_in_offset;
 
+    printk("%s(): sum=%d\n", __func__, sum);
     return sum;
 }
 
