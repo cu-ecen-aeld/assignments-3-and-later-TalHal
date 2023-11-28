@@ -16,6 +16,7 @@
 #include <sys/queue.h>
 #include <time.h>
 #include <sys/time.h>
+#include "aesd_ioctl.h"
 
 //#define DEBUG
 #ifdef DEBUG
@@ -189,7 +190,21 @@ void* thread_func(void* arg)
 		
 	
 	}
+
+	if (strncmp(buffer, "AESDCHAR_IOCSEEKTO:", 19) == 0) {
+		char *ptr;
+		char *ptr1;
+		uint32_t write_cmd = (uint32_t)strtol(buffer + 19, &ptr, 10);
+		uint32_t offset = (uint32_t)strtol(ptr + 1, &ptr1, 10);
+
+		struct aesd_seekto msg;
+
+		msg.write_cmd = write_cmd;
+		msg.write_cmd_offset = offset;
+
+		ioctl(filefd, AESDCHAR_IOCSEEKTO, &msg);
 	
+	}
 	
 	rc = write(filefd, buffer, off_buff);
 	if (rc < 0) {
